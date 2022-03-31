@@ -7,8 +7,9 @@ COPY . /yap/src/yap
 
 ENV GOPATH=/yap
 WORKDIR /yap/src/yap
+RUN apt update && apt install ca-certificates libgnutls30 -y
 
-RUN bunzip2 data/*.bz2
+# RUN bunzip2 data/*.bz2
 RUN go get .
 RUN go build .
 
