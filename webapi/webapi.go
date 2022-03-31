@@ -2,9 +2,6 @@ package webapi
 
 import (
 	"encoding/json"
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
-	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"strings"
@@ -14,6 +11,11 @@ import (
 	"yap/nlp/format/lex"
 	"yap/nlp/parser/joint"
 	"yap/nlp/types"
+
+	"github.com/gonuts/commander"
+	"github.com/gonuts/flag"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 )
 
 var (
@@ -24,6 +26,10 @@ type Request struct {
 	Text          string `json:text`
 	AmbLattice    string `json:amb_lattice`
 	DisambLattice string `json:disamb_lattice`
+}
+
+type ParseRequest struct {
+	Sentences []types.BasicSentence `json:sentences`
 }
 
 type Data struct {
@@ -108,7 +114,50 @@ func HebrewJointHandler(resp http.ResponseWriter, req *http.Request) {
 	respondWithJSON(resp, http.StatusOK, data)
 }
 
-func respondWithJSON(resp http.ResponseWriter, code int, payload Data) {
+func HebrewIndexHandler(resp http.ResponseWriter, req *http.Request) {
+	respondWithJSON(resp, http.StatusOK, nil)
+}
+
+func HebrewParseHandler(resp http.ResponseWriter, req *http.Request) {
+	request := ParseRequest{}
+	err := json.NewDecoder(req.Body).Decode(&request)
+	if err != nil {
+		data := Data{Error: err}
+		respondWithJSON(resp, http.StatusBadRequest, data)
+		return
+	}
+	maLattice := HebrewMorphAnalyzeBasicSentences(request.Sentences)
+	depGraph := JointRawParseAmbiguousLattices(maLattice)
+
+	output := make([][]Node, len(depGraph))
+	for i, graph := range depGraph {
+		output[i] = GraphToNodes(graph)
+	}
+
+	respondWithJSON(resp, http.StatusOK, output)
+}
+
+func HebrewTagHandler(resp http.ResponseWriter, req *http.Request) {
+	request := ParseRequest{}
+	err := json.NewDecoder(req.Body).Decode(&request)
+	if err != nil {
+		data := Data{Error: err}
+		respondWithJSON(resp, http.StatusBadRequest, data)
+		return
+	}
+
+	maLattice := HebrewMorphAnalyzeBasicSentences(request.Sentences)
+	parsed := RawMorphDisambiguateLattices(maLattice)
+
+	output := make([][]Node, len(parsed))
+	for i, tokens := range parsed {
+		output[i] = TokensToNodes(tokens)
+	}
+
+	respondWithJSON(resp, http.StatusOK, output)
+}
+
+func respondWithJSON(resp http.ResponseWriter, code int, payload interface{}) {
 	resp.Header().Set("Content-Type", "application/json")
 	resp.WriteHeader(code)
 	jsonPayload, err := json.Marshal(payload)
@@ -119,7 +168,6 @@ func respondWithJSON(resp http.ResponseWriter, code int, payload Data) {
 		resp.Write(jsonPayload)
 	}
 }
-
 func APIServerStartCmd() *commander.Command {
 	cmd := &commander.Command{
 		Run:       StartAPIServer,
@@ -167,6 +215,13 @@ func StartAPIServer(cmd *commander.Command, args []string) error {
 	router.HandleFunc("/yap/heb/dep", DepParserHandler)
 	router.HandleFunc("/yap/heb/pipeline", HebrewPipelineHandler)
 	router.HandleFunc("/yap/heb/joint", HebrewJointHandler)
-	log.Fatal(http.ListenAndServe(":8000", router))
+	router.HandleFunc("/", HebrewIndexHandler)
+	router.HandleFunc("/tag", HebrewTagHandler)
+	router.HandleFunc("/parse", HebrewParseHandler)
+	log.Println("Server is ready at port 8000")
+	headers := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"})
+	methods := handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"})
+	origins := handlers.AllowedOrigins([]string{"*"})
+	log.Fatal(http.ListenAndServe(":8000", handlers.CORS(headers, methods, origins)(router)))
 	return nil
 }

@@ -3,7 +3,6 @@ package webapi
 import (
 	"bytes"
 	"fmt"
-	"github.com/gonuts/commander"
 	"log"
 	"strings"
 	"sync"
@@ -16,6 +15,8 @@ import (
 	"yap/nlp/parser/disambig"
 	nlp "yap/nlp/types"
 	"yap/util"
+
+	"github.com/gonuts/commander"
 )
 
 var (
@@ -121,4 +122,40 @@ func MorphDisambiguateLattices(input string) string {
 	mapping.Write(buf, mappings)
 	mdLock.Unlock()
 	return buf.String()
+}
+
+func RawMorphDisambiguateLattices(input string) [][]nlp.EMorpheme {
+	mdLock.Lock()
+
+	reader := strings.NewReader(input)
+
+	lAmb, lAmbE := lattice.Read(reader, 0)
+	if lAmbE != nil {
+		panic(fmt.Sprintf("Failed reading raw input - %v", lAmbE))
+	}
+
+	predAmbLat := lattice.Lattice2SentenceCorpus(lAmb, app.EWord, app.EPOS, app.EWPOS, app.EMorphProp, app.EMHost, app.EMSuffix)
+	//mappings := app.Parse(predAmbLat, mdBeam)
+
+	parsed := make([][]nlp.EMorpheme, len(predAmbLat))
+
+	for i, instance := range predAmbLat {
+		result, _ := mdBeam.Parse(instance)
+		var row []nlp.EMorpheme
+
+		for _, m := range result.(*disambig.MDConfig).Mappings {
+			if m.Token == nlp.ROOT_TOKEN {
+				continue
+			}
+
+			for _, morph := range m.Spellout {
+				row = append(row, *morph)
+			}
+		}
+
+		parsed[i] = row
+	}
+
+	mdLock.Unlock()
+	return parsed
 }
