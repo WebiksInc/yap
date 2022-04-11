@@ -58,6 +58,14 @@ For example the sentence “אכלתי ארוחה טעימה אתמול”
  _    _
 ```
 
+
+#### Running API from Docker
+In order to run the project api from Docker Need to make sure docker is installed.
+
+```console
+    $ docker run --name yap -d -p 8000:8000 yap
+```
+
 ### The Repository
 
 - The original repository: **https://github.com/OnlpLab/yap**
@@ -405,12 +413,6 @@ func StartAPIServer(cmd *commander.Command, args []string) error {
 
 ```
 
-#### Running API from Docker
-In order to run the project api from Docker Need to make sure docker is installed.
-
-```console
-    $ docker run --name yap -d -p 8000:8000 yap
-```
 #### Using the YAP API
 You can then send HTTP GET requests with json objects in the request body, **pay attention that the input string should end with two space characters**. You'll receive back a json object containing the 3 output levels:
 ```console
